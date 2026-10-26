@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# PyTorch / ML Models
+*.pth
+*.pt
+*.ckpt
+
+# Data and Results (Should not be uploaded)
+data/
+data_audio/
+data_bio/
+data_mnist1d/
+results/
+*.pkl
+*.json
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
