@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+data/
+data_audio/
+data_bio/
+data_mnist1d/
+results/
+.vscode/
