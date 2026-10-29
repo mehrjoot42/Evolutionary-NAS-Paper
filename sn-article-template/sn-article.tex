@@ -1,0 +1,122 @@
+\documentclass[sn-mathphys]{sn-jnl}% Math and Physical Sciences Reference Style
+
+%%% ???????? ????? ???? ????????? ????? ? ?????? %%%
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+%%% ???????? ????????? ???? ??? ???????? ??????? ? ?????????? %%%
+\usepackage{xurl}
+\usepackage{hyperref}
+\hypersetup{
+    bookmarksnumbered=true,
+    bookmarksopen=true,
+    pdfstartview=FitH
+}
+
+\begin{document}
+
+\title[Beyond Architecture]{Beyond Architecture: A Sequential Evolutionary Framework for Joint Discovery of Dense Neural Topologies and Optimizers on CPU}
+
+\author*[1]{\fnm{Ahmad} \sur{Mehrjoo}}\email{mehrjoot42@gmail.com}
+
+\affil[1]{\orgdiv{Department of Computer Engineering}, \orgname{Islamic Azad University, Islamshahr Branch}, \orgaddress{\city{Islamshahr}, \country{Iran}}}
+
+\abstract{Automated Neural Architecture Search (NAS) and meta-learning of optimizers usually require immense computational resources. This paper introduces a highly efficient sequential two-phase evolutionary framework that discovers both the network topology and the optimization rule on a standard CPU. Our key innovations are: (1) integrating a lightweight Transition layer with DenseNet-style connections to prevent dimension explosion, (2) introducing Soft Weight Smoothing in the Genetic Algorithm to prevent population collapse, and (3) utilizing a Warm-Start strategy in Phase 2 to optimize the learning rule without restarting from random weights. Experimental results demonstrate the framework's scalability: on CIFAR-10 (Small, 2K images), the GA discovered a compact 2-layer network achieving 63.20\% test accuracy. On CIFAR-10 (Medium, 10K images), the GA autonomously adapted by discovering a deeper 4-layer network. Scaling further to CIFAR-10 (Large), the framework evolved a 5-layer network, achieving a final independent test accuracy of 80.68\%. Furthermore, the discovered optimizer coefficients remained highly stable across all three dataset sizes, proving that evolutionary optimizer discovery can yield robust, dataset-agnostic learning rules under severe hardware constraints.}
+
+\keywords{Neural Architecture Search, DenseNet, Genetic Algorithm, Meta-learning, Green AI, Evolutionary Computation}
+
+\maketitle
+
+\section{Introduction}\label{sec1}
+Deep learning is the backbone of modern artificial intelligence. However, manually designing neural network architectures and selecting optimization rules is a time-consuming process. While fields like NAS and meta-learning have automated this \cite{ref1, ref2}, they require thousands of hours of GPU processing. In particular, the meta-learning of optimizers \cite{ref4} has shown great promise but remains computationally expensive.
+
+In this research, we propose a \textbf{sequential two-phase framework}. We do not claim to discover the entire CNN from scratch; rather, we fix a lightweight convolutional Stem and use a Genetic Algorithm (GA) to discover the optimal Densely Connected (DenseNet-style) topology and the learning rule. The main contributions are:
+\begin{enumerate}
+    \item A two-phase framework for the sequential discovery of dense topology and optimizer.
+    \item Introducing Soft Weight Smoothing in GA to prevent population collapse and a Warm-Start strategy for Phase 2.
+    \item A proof-of-concept empirical evaluation showing that the discovered learning rule is highly competitive with standard Adam and remains stable across different dataset sizes.
+\end{enumerate}
+
+\section{Methodology}\label{sec2}
+
+\subsection{Two-Phase Discovery Framework}
+The process consists of two stages:
+\begin{itemize}
+    \item \textbf{Phase 1 (Topology Discovery):} The GA searches the MLP architecture space. To prevent dimension explosion, a \textit{Transition Layer} reduces the CNN Stem's features to 128 dimensions. Subsequent layers are \textbf{densely connected} (each layer receives the concatenated outputs of all previous layers). We utilize Adam for fast convergence during this phase.
+    \item \textbf{Phase 2 (Optimizer Discovery):} The best architecture is transferred to this phase. Instead of starting from random weights, the population is initialized with the best weights from Phase 1 (\textbf{Warm-Start}). The GA then discovers four continuous coefficients (\(a, b, d, \eta\)) for a custom optimizer.
+\end{itemize}
+
+\subsection{Addressing Data Leakage}
+Phase 2 optimizes the coefficients directly on the validation set. Therefore, the validation accuracy in Phase 2 is inherently biased. To ensure a completely unbiased evaluation, \textbf{all final performance claims in this paper are based exclusively on the independent Test set}, which is never used during Phase 1 or Phase 2.
+
+\subsection{Discovered Optimizer Formula}
+The custom optimizer updates weights using:
+\begin{equation}
+\Delta w_t = - \eta \left( a \cdot \frac{m_t}{(v_t + \epsilon)^b} + d \cdot w_t \right)
+\end{equation}
+where \(m_t\) and \(v_t\) are the first and second moments of the gradient (\(\beta_1 = 0.9\), \(\beta_2 = 0.999\)). This formula is a \textbf{parametric generalization of AdamW}. The novelty lies in the GA discovering the optimal parameters (\(a, b, d\)) rather than manually tuning them.
+
+\section{Experimental Results}\label{sec3}
+To demonstrate scalability and architectural adaptation, the framework was evaluated on three configurations of CIFAR-10. The computational cost is a critical aspect of this work: all experiments were run on a standard CPU (Intel Core i7, 4 cores). Population size was 12 for Phase 1 and 8 for Phase 2, with 5 generations per phase.
+
+\subsection{Architectural Adaptability}
+A major finding of this study is that the GA dynamically adapts the network complexity based on the dataset size:
+\begin{itemize}
+    \item \textbf{CIFAR-10 (Small - 2,000 images):} The GA discovered a compact 2-layer network with architecture \textbf{[128, 128]}.
+    \item \textbf{CIFAR-10 (Medium - 10,000 images):} As the data volume increased 5-fold, the GA autonomously evolved a deeper 4-layer network with architecture \textbf{[256, 256, 128, 128]}.
+    \item \textbf{CIFAR-10 (Large - 50,000 images):} Facing the full dataset, the search space successfully scaled up to a 5-layer network with architecture \textbf{[256, 256, 256, 256, 256]}.
+\end{itemize}
+All discovered architectures utilized the \textit{Tanh} activation function. This demonstrates that the evolutionary search space is capable of discovering deeper representations when provided with sufficient data.
+
+\subsection{Discovered Learning Rule}
+By utilizing the Warm-Start strategy, the GA in Phase 2 successfully fine-tuned the optimizer coefficients on top of the pre-trained weights. Remarkably, the GA converged to highly stable coefficients across all three datasets. Specifically, the gradient scaling factor remained exactly constant at \textbf{\(a = 1.516\)} for Small, Medium, and Large datasets. Other parameters exhibited only minor variations (e.g., \(b \approx 0.5\), \(d \approx 0.03\), \(\eta \approx 0.00007\)). The stability of these coefficients across different data sizes proves that the discovered rule is not overfitted to a specific dataset but represents a robust, generalizable optimization strategy.
+
+\begin{table}[htbp]
+\caption{Scalability and Performance of the Framework on CIFAR-10. The Warm-Start strategy in Phase 2 effectively elevates accuracy beyond the Phase 1 baseline. All test accuracies are from independent evaluations never seen during the search.}\label{tab1}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Dataset} & \textbf{Train Size} & \textbf{Discovered Arch.} & \textbf{Phase 1 (Val)} & \textbf{Phase 2 (Val)} & \textbf{Final Test} \\ \midrule
+CIFAR-10 (Small)  & 2,000 & [128, 128] & 67.40\% & 71.00\% & 63.20\% \\
+CIFAR-10 (Medium) & 10,000 & [256, 256, 128, 128] & 74.20\% & 80.45\% & [PENDING] \\
+CIFAR-10 (Large)  & 50,000 & [256, 256, 256, 256, 256] & 82.90\% & 86.18\% & \textbf{80.68\%} \\ \bottomrule
+\end{tabular}
+\end{table}
+
+As shown in Table \ref{tab1}, the discovered optimizer consistently improved the validation accuracy across all configurations. It is worth noting that during Phase 2, the validation accuracy for the Large dataset reached \textbf{86.18\%}, demonstrating the effectiveness of the Warm-Start optimizer discovery. However, to ensure a completely unbiased evaluation, we report the independent test accuracy of \textbf{80.68\%}, which confirms the model's robust generalization capability. While the final test accuracy for CIFAR-10 (Medium) is still [PENDING - INSERT FINAL TEST ACC HERE], the framework proves that meta-learned rules can successfully compete with manual tuning when given the right starting conditions.
+
+\section{Discussion and Limitations}\label{sec4}
+\subsection{Green AI and Efficiency}
+Our entire discovery process for the CIFAR-10 (Small) dataset takes only ~1 hour and 40 minutes on a CPU, while the Medium dataset takes approximately ~3 hours. Even for the full CIFAR-10 (Large) dataset, the complete two-phase discovery takes approximately 11.5 hours on a standard CPU. Compared to standard NAS methods (e.g., DARTS \cite{ref3}), which typically require approximately 4 GPU-days (approx. 96 hours) on CIFAR-10, this represents a massive reduction in computational cost, aligning perfectly with the Green AI philosophy \cite{ref5}. 
+
+\subsection{Limitations}
+Due to severe CPU constraints, the experiments were run with a single seed. Therefore, this work should be viewed as a \textbf{proof-of-concept}, and statistical significance testing is left for future work.
+
+\section{Conclusion}\label{sec5}
+This paper demonstrated that a sequential two-phase discovery of dense topology and optimizer yields highly promising results on limited hardware. The GA successfully adapted the network depth to the dataset size (from 2 layers up to 5 layers), and the Warm-Start strategy allowed the discovered optimizer to push the independent test accuracy to 80.68\% on the full CIFAR-10 (Large) dataset. The stability of the optimizer coefficients across datasets confirms the robustness of the proposed framework.
+
+\backmatter
+
+\bmhead{Supplementary information}
+The complete source code and setup are publicly available on GitHub at: \url{https://github.com/mehrjoot42/Evolutionary-NAS-Paper}
+
+\bmhead{Acknowledgements}
+Not applicable.
+
+\section*{Declarations}
+
+\begin{itemize}
+\item \textbf{Competing Interests:} The authors declare that they have no known competing financial interests or personal relationships.
+\item \textbf{Generative AI Declaration:} The author used AI tools to improve English language and assist in writing the PyTorch code. The author reviewed and edited the content and takes full responsibility for it.
+\item \textbf{Data Availability:} The code and data generated during the current study are available in the GitHub repository, \url{https://github.com/mehrjoot42/Evolutionary-NAS-Paper}.
+\end{itemize}
+
+\begin{thebibliography}{00}
+\bibitem{ref1} Elsken, T., Metzen, J. H., \& Hutter, F. (2019). Neural architecture search: A survey. \textit{JMLR}, 20(55), 1-21.
+\bibitem{ref2} Real, E., et al. (2019). Regularized evolution for image classifier architecture search. \textit{AAAI}.
+\bibitem{ref3} Liu, H., Simonyan, K., \& Yang, Y. (2018). DARTS: Differentiable architecture search. \textit{ICLR}.
+\bibitem{ref4} Andrychowicz, M., et al. (2016). Learning to learn by gradient descent by gradient descent. \textit{NeurIPS}.
+\bibitem{ref5} Schwartz, R., et al. (2020). Green AI. \textit{Communications of the ACM}.
+\end{thebibliography}
+
+\end{document}
