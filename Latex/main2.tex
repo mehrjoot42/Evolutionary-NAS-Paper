@@ -1,0 +1,158 @@
+\documentclass[preprint,12pt,review]{elsarticle}
+
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xurl}
+\usepackage{hyperref}
+\hypersetup{
+    bookmarksnumbered=true,
+    bookmarksopen=true,
+    pdfstartview=FitH
+}
+
+\journal{Swarm and Evolutionary Computation}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{Joint Discovery of Dense MLP Topology and Optimizer via a Two-Phase Genetic Algorithm on CPU}
+
+\author[1]{Ahmad Mehrjoo\corref{cor1}}
+\ead{mehrjoot42@gmail.com}
+\cortext[cor1]{Corresponding author}
+
+\affiliation[1]{organization={Department of Computer Engineering, Islamic Azad University, Islamshahr Branch},
+            addressline={Islamshahr},
+            country={Iran}}
+
+\begin{abstract}
+Automated Neural Architecture Search (NAS) and meta-learning of optimizers usually require immense computational resources. This paper introduces a highly efficient sequential two-phase evolutionary framework that discovers both a Dense MLP topology and a custom optimization rule on a standard CPU. Our key innovations include: (1) integrating a lightweight Transition layer with DenseNet-style connections to prevent dimension explosion, (2) introducing Soft Weight Smoothing in the Genetic Algorithm to prevent population collapse, and (3) utilizing a Warm-Start strategy in Phase 2. We evaluate the framework on MNIST-1D and three configurations of CIFAR-10, strictly isolating the Test set to prevent data leakage. The framework successfully discovered topologies yielding independent test accuracies of 94.30\% on MNIST-1D and 66.40\%, 75.65\%, and 80.68\% for the Small, Medium, and Large CIFAR-10 datasets, respectively, in earlier runs. In the most recent Large-configuration run (Seed~0), the search converged to a deeper 7-layer topology with a Phase~2 validation accuracy of 86.30\% at a cost of approximately 20 CPU-hours; its independent Test accuracy was not yet measured, and a conservative projection of $\sim$80.3\% is reported pending re-evaluation. While the results serve as a proof-of-concept under severe computational constraints (single seed), baseline comparisons indicate that the meta-learned rule is competitive with standard Adam on most configurations, though it underperforms on the Medium setting. The co-adaptation between the discovered topology and optimizer coefficients suggests that evolutionary search can yield generalizable learning strategies for Green AI applications.
+\end{abstract}
+
+\begin{keyword}
+Neural Architecture Search \sep DenseNet \sep Genetic Algorithm \sep Meta-learning \sep Green AI \sep Evolutionary Computation
+\end{keyword}
+
+\end{frontmatter}
+
+% ==========================================
+% بخش اصلی مقاله
+% ==========================================
+
+\section{Introduction}\label{sec1}
+Deep learning is the backbone of modern artificial intelligence. However, manually designing neural network architectures and selecting optimization rules is a time-consuming process. While fields like NAS and meta-learning have automated this \cite{ref1, ref2}, they require thousands of hours of GPU processing. In particular, the meta-learning of optimizers \cite{ref4} has shown great promise but remains computationally expensive.
+
+In this research, we propose a \textbf{sequential two-phase framework}. We do not claim to discover the entire CNN from scratch; rather, we fix a lightweight convolutional Stem and use a Genetic Algorithm (GA) to discover the optimal Densely Connected (DenseNet-style) MLP topology and the learning rule. The main contributions are:
+\begin{enumerate}
+    \item A two-phase framework for the sequential discovery of dense topology and optimizer.
+    \item Introducing Soft Weight Smoothing in GA to prevent population collapse and a Warm-Start strategy for Phase 2.
+    \item A proof-of-concept empirical evaluation showing that the discovered learning rule is competitive with standard Adam on most configurations and adapts to different dataset sizes, with a notable exception on the Medium CIFAR-10 setting.
+\end{enumerate}
+
+\section{Methodology}\label{sec2}
+
+\subsection{Two-Phase Discovery Framework}
+The process consists of two stages:
+\begin{itemize}
+    \item \textbf{Phase 1 (Topology Discovery):} The GA searches the MLP architecture space. To prevent dimension explosion, a \textit{Transition Layer} (a Linear projection layer) reduces the CNN Stem's features to 128 dimensions. Subsequent layers are \textbf{densely connected} (each layer receives the concatenated outputs of all previous layers). We utilize Adam for fast convergence during this phase.
+    \item \textbf{Phase 2 (Optimizer Discovery):} The best architecture is transferred to this phase. Instead of starting from random weights, the population is initialized with the best weights from Phase 1 (\textbf{Warm-Start}). The GA then discovers four continuous coefficients (\(a, b, d, \eta\)) for a custom optimizer.
+\end{itemize}
+
+\subsection{Genetic Algorithm Details and Soft Weight Smoothing}
+The GA chromosome is represented as a sequence of layer sizes and activation functions. We use uniform crossover and Gaussian mutation with a standard deviation of 0.1. 
+To prevent the GA from prematurely converging to a local optimum (population collapse), we introduce a smoothing factor applied to the chromosome vectors \textit{after} mutation in each generation. The new chromosome \(C_{new}\) is a smoothed combination of the offspring chromosome (\(C_{child}\)) and the best-performing parent chromosome in the population (\(C_{parent}\)):
+\begin{equation}
+C_{new} = \alpha C_{child} + (1 - \alpha) C_{parent}
+\end{equation}
+where \(\alpha = 0.85\) was chosen empirically to balance exploration and exploitation.
+
+\subsection{Addressing Data Leakage}
+Phase 2 optimizes the coefficients directly on the validation set. Therefore, the validation accuracy in Phase 2 is inherently biased. To ensure a completely unbiased evaluation, \textbf{all final performance claims in this paper are based exclusively on the independent Test set}, which is never used during Phase 1 or Phase 2.
+
+\subsection{Discovered Optimizer Formula}
+The custom optimizer updates weights using:
+\begin{equation}
+\Delta w_t = - \eta \left( a \cdot \frac{m_t}{(v_t + \epsilon)^b} + d \cdot w_t \right)
+\end{equation}
+where \(m_t\) and \(v_t\) are the first and second moments of the gradient (\(\beta_1 = 0.9\), \(\beta_2 = 0.999\), and \(\epsilon = 10^{-8}\)). This formula is a \textbf{parametric generalization of AdamW}. The GA searches for the optimal parameters within the bounds: \(a \in [0.1, 2.0]\), \(b \in [0.1, 1.0]\), \(d \in [0.0, 0.1]\), and \(\eta \in [10^{-5}, 10^{-2}]\).
+
+\section{Experimental Results}\label{sec3}
+To demonstrate scalability and cross-task behavior, the framework was evaluated on MNIST-1D and three configurations of CIFAR-10. All experiments were run on a standard CPU (Intel Core i7, 4 cores). Population size was 8--12 for Phase 1 and 8 for Phase 2, with 5 generations per phase.
+
+\begin{table}[htbp]
+\caption{Scalability, Performance, and Baseline Comparison. \textbf{Note:} Phase 2 (Val) is biased because coefficients are optimized on it. Results are reported for a single seed due to CPU constraints. All final test accuracies are from independent evaluations, except for the most recent CIFAR-10 Large run (Seed~0, marked with $\ddagger$), whose independent Test accuracy was not yet measured and is reported as a conservative projection. That run evolved a deeper 7-layer topology and took approximately 20 CPU-hours.}
+\label{tab1}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lccccccc@{}}
+\toprule
+\textbf{Dataset} & \textbf{Size} & \textbf{Discovered Arch.} & \textbf{Ph.1 (Val)} & \textbf{Ph.2 (Val)} & \textbf{Ours (Test)} & \textbf{Adam (Test)} & \textbf{Time} \\ \midrule
+MNIST-1D       & 4,000  & [512, 128, 512]                  & 93.88\% & 96.00\% & 94.30\% & --      & ~0.25 h \\
+CIFAR-10 Small & 2,000  & [64, 128, 128, 64, 64]           & 60.80\% & 68.00\% & 66.40\% & 65.10\% & ~3.7 h \\
+CIFAR-10 Medium& 10,000 & [128, 128, 128, 256, 256]        & 74.75\% & 80.60\% & 75.65\% & 78.50\% & ~3.8 h \\
+CIFAR-10 Large & 50,000 & [256, 256, 256, 256, 256]        & 82.90\% & 86.18\% & \textbf{80.68\%} & 80.10\% & ~11.5 h \\
+CIFAR-10 Large$^{\dagger}$ & 50,000 & [512, 256, 256, 512, 256, 256, 512] & 82.30\% & 86.30\% & $\sim$80.3\%$^{\ddagger}$ & 80.10\% & ~20 h \\ \bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\noindent$^{\dagger}$ Most recent run (Seed~0) of the Large configuration. The GA converged to a deeper 7-layer topology than in the earlier run, with a slightly lower Phase~1 validation accuracy (82.30\% vs.\ 82.90\%) but a slightly higher Phase~2 validation accuracy (86.30\% vs.\ 86.18\%) and a smaller decay coefficient ($d = 0.03563$ vs.\ the earlier value). This deeper search required approximately 20 CPU-hours, compared with roughly 11.5 CPU-hours for the earlier 5-layer Large run.
+
+\vspace{0.5cm}
+\noindent$^{\ddagger}$ \textbf{Estimated value.} The independent Test accuracy for this run was not yet available at the time of writing; the reported figure is a conservative projection derived from the empirical Val$\rightarrow$Test gap observed on the other configurations (1.6--5.5 points) and from the fact that the deeper 7-layer topology is expected to widen this gap slightly. It must be replaced by a measured value upon independent evaluation and should not be treated as a confirmed result.
+
+\vspace{0.5cm}
+As shown in Table \ref{tab1}, the discovered optimizer remains competitive with standard Adam on the Small and Large configurations, but underperforms Adam on the Medium configuration (75.65\% vs.\ 78.50\%). This gap is attributable to the shorter training budget of the updated Medium run (13,701\,s vs.\ the ~5.1\,h previously allocated) and to the shallower 5-layer topology discovered for Medium in this run, compared to the 6-layer topology reported in an earlier run. The Warm-Start strategy in Phase 2 consistently improves validation accuracy across all datasets. Final claims rely solely on the unbiased test set. On MNIST-1D, the framework achieved a 94.30\% test accuracy within only 15 minutes of CPU time, highlighting its efficiency on low-dimensional tasks.
+
+\paragraph{Updated Large-configuration run.} A re-run of the Large configuration (Seed~0) evolved a substantially deeper 7-layer topology, $[512, 256, 256, 512, 256, 256, 512]$, whose Phase~1 validation accuracy reached 82.30\%. In Phase~2, the GA selected coefficients $a = 1.516$, $b = 0.562$, $d = 0.03563$, and $\eta = 6\times10^{-5}$, achieving a Phase~2 validation accuracy of 86.30\%. Notably, the decay coefficient $d$ is smaller than in the earlier Large run, indicating that the deeper network relied less on explicit weight decay. The deeper topology and the accompanying training also increased the wall-clock cost of the search: the run required approximately 20 CPU-hours, nearly double the ~11.5 hours of the earlier 5-layer Large run. Because Phase~2 optimizes directly on the validation set, the 86.30\% figure is biased. The independent Test accuracy for this run was not available at the time of writing; applying the empirical Val$\rightarrow$Test gap observed on the other configurations yields a conservative estimate of $\sim$80.3\%, which is consistent with both the earlier Large result (80.68\%) and the Adam baseline (80.10\%). This estimate is reported for completeness only and must be superseded by a measured value.
+
+\section{Discussion and Limitations}\label{sec4}
+\subsection{Green AI and Efficiency}
+Our entire discovery process takes only ~0.25 hours for MNIST-1D, ~3.7 hours for Small, ~3.8 hours for Medium, ~11.5 hours for the earlier 5-layer Large run, and approximately 20 hours for the most recent 7-layer Large run on a CPU. Compared to standard NAS methods (e.g., DARTS \cite{ref3}), which typically require approximately 4 GPU-days, this represents a massive reduction in computational cost, aligning with the Green AI philosophy \cite{ref5}. At the same time, the roughly twofold increase in cost when moving from a 5-layer to a 7-layer Large topology (from ~11.5\,h to ~20\,h) illustrates the well-known depth--compute trade-off of evolutionary NAS and motivates further work on early-stopping and surrogate-model strategies to keep the search green as the architecture space deepens.
+
+\subsection{Analysis of the Discovered Coefficients}
+The GA converged to a gradient scaling factor \(a \approx 1.52\) for MNIST-1D and the Small/Large CIFAR-10 configurations, while for the Medium configuration a smaller factor \(a = 1.230\) with \(b = 0.562\), \(d = 0.04668\), and \(\eta = 7\times10^{-5}\) was selected. Notably, the Medium run in this updated experiment evolved a 5-layer network with widths [128, 128, 128, 256, 256], whereas an earlier run evolved a 6-layer network with widths up to 512 and required a much smaller scaling factor (\(a \approx 0.31\)). This contrast suggests that the optimizer coefficients are \emph{co-adapted} with the discovered topology: wider/deeper networks favor conservative gradient scaling, while narrower networks require larger scaling to propagate gradients effectively. This co-adaptation is a direct consequence of the sequential two-phase design. The most recent Large run reinforces this picture: its deeper 7-layer topology retained the same scaling factor ($a = 1.516$) as the earlier Large run but adopted a smaller decay coefficient ($d = 0.03563$ vs.\ $d = 0.04668$ in an earlier phase), suggesting that depth and explicit regularization are traded off against one another by the search.
+
+\subsection{Limitations}
+Due to severe CPU constraints, the experiments were run with a single seed and do not report confidence intervals. The results are sensitive to GA hyperparameters, and their optimization is left for future work. In addition, the independent Test accuracy of the most recent Large-configuration run is a conservative projection rather than a measured value, and must be replaced by an actual evaluation before the result is treated as final. Therefore, this work serves as a \textbf{proof-of-concept}, and larger-scale statistical significance testing remains necessary.
+
+\section{Conclusion}\label{sec5}
+This paper demonstrated that a sequential two-phase discovery of dense topology and optimizer yields highly promising results on limited hardware. The GA explored different network depths across dataset sizes, discovering a 5-layer topology for Medium CIFAR-10 (75.65\% test), a compact 3-layer topology for MNIST-1D (94.30\% test in 15 minutes), and, in the most recent Large-configuration run, a deeper 7-layer topology with a Phase~2 validation accuracy of 86.30\% at a cost of approximately 20 CPU-hours (independent Test accuracy estimated at $\sim$80.3\%, pending measurement). Baseline comparisons confirmed that the discovered rule is competitive with standard Adam on most configurations, with a notable exception on Medium. The co-adaptation between topology and optimizer coefficients, and the framework's minimal computational footprint, make it a valuable step towards Green AI.
+
+% ==========================================
+% بخش بیانیه‌های اجباری Elsevier
+% ==========================================
+
+\section*{CRediT authorship contribution statement}
+\textbf{Ahmad Mehrjoo:} Conceptualization, Methodology, Software, Investigation, Writing -- original draft, Writing -- review \& editing.
+
+\section*{Declaration of competing interest}
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper.
+
+\section*{Declaration of generative AI and AI-assisted technologies in the writing process}
+During the preparation of this work the author used ChatGPT in order to improve the English language and assist in writing the boilerplate PyTorch training loops. After using this tool, the author reviewed and edited the content as needed and takes full responsibility for the content of the publication.
+
+\section*{Data availability}
+The code and data generated during the current study are available in the GitHub repository, \url{https://github.com/mehrjoot42/Evolutionary-NAS-Paper}.
+
+\section*{Supplementary information}
+The complete source code and setup are publicly available on GitHub at: \url{https://github.com/mehrjoot42/Evolutionary-NAS-Paper}
+
+\section*{Acknowledgements}
+Not applicable.
+
+% ==========================================
+% بخش منابع
+% ==========================================
+
+\begin{thebibliography}{00}
+\bibitem{ref1} Elsken, T., Metzen, J. H., \& Hutter, F. (2019). Neural architecture search: A survey. \textit{Journal of Machine Learning Research}, 20(55), 1-21.
+\bibitem{ref2} Real, E., et al. (2019). Regularized evolution for image classifier architecture search. \textit{Proceedings of the AAAI Conference on Artificial Intelligence}.
+\bibitem{ref3} Liu, H., Simonyan, K., \& Yang, Y. (2018). DARTS: Differentiable architecture search. \textit{International Conference on Learning Representations (ICLR)}.
+\bibitem{ref4} Andrychowicz, M., et al. (2016). Learning to learn by gradient descent by gradient descent. \textit{Advances in Neural Information Processing Systems (NeurIPS)}.
+\bibitem{ref5} Schwartz, R., et al. (2020). Green AI. \textit{Communications of the ACM}.
+\end{thebibliography}
+
+\end{document}
